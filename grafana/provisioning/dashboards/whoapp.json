@@ -1,0 +1,201 @@
+{
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0" },
+    { "type": "datasource", "id": "influxdb", "name": "InfluxDB", "version": "1.0.0" }
+  ],
+  "annotations": { "list": [] },
+  "description": "WhoApp Network Behavioral Fingerprinting Dashboard",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "panels": [
+    {
+      "id": 1,
+      "title": "🚨 Alerts Over Time",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": "WhoApp-InfluxDB",
+      "options": {
+        "barWidth": 0.6,
+        "fillOpacity": 60,
+        "gradientMode": "opacity",
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "Count", "lineWidth": 1 }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "WhoApp-InfluxDB",
+          "query": "from(bucket: \"network_flows\")\n  |> range(start: -6h)\n  |> filter(fn: (r) => r._measurement == \"alert\")\n  |> filter(fn: (r) => r._field == \"risk_score\")\n  |> aggregateWindow(every: 5m, fn: count)\n  |> group(columns: [\"severity\"])",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "👤 Top Users by Risk Score",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": "WhoApp-InfluxDB",
+      "options": { "sortBy": [{ "displayName": "Max Risk", "desc": true }] },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Max Risk" }, "properties": [
+            { "id": "custom.displayMode", "value": "color-background" },
+            { "id": "thresholds", "value": { "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 4 },
+              { "color": "orange", "value": 7 },
+              { "color": "red", "value": 9 }
+            ]}}
+          ]}
+        ]
+      },
+      "targets": [
+        {
+          "datasource": "WhoApp-InfluxDB",
+          "query": "from(bucket: \"network_flows\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"flow\")\n  |> filter(fn: (r) => r._field == \"risk_score\")\n  |> group(columns: [\"user\"])\n  |> max()\n  |> rename(columns: {_value: \"Max Risk\", user: \"User\"})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "📦 App Category Distribution",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "datasource": "WhoApp-InfluxDB",
+      "options": {
+        "pieType": "donut",
+        "legend": { "displayMode": "table", "placement": "right", "values": ["percent"] }
+      },
+      "targets": [
+        {
+          "datasource": "WhoApp-InfluxDB",
+          "query": "from(bucket: \"network_flows\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"flow\")\n  |> filter(fn: (r) => r._field == \"byte_count\")\n  |> group(columns: [\"app_category\"])\n  |> sum()\n  |> rename(columns: {_value: \"Bytes\", app_category: \"Category\"})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "📊 Bytes Transferred per User (Heatmap)",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 8 },
+      "datasource": "WhoApp-InfluxDB",
+      "options": {
+        "calculate": false,
+        "color": { "scheme": "Spectral", "steps": 64 },
+        "legend": { "show": true }
+      },
+      "targets": [
+        {
+          "datasource": "WhoApp-InfluxDB",
+          "query": "from(bucket: \"network_flows\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"flow\")\n  |> filter(fn: (r) => r._field == \"byte_count\")\n  |> aggregateWindow(every: 1h, fn: sum)\n  |> group(columns: [\"user\"])",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "⚠️ Policy Violations Timeline",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 16 },
+      "datasource": "WhoApp-InfluxDB",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 15, "gradientMode": "opacity", "spanNulls": true }
+        }
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "datasource": "WhoApp-InfluxDB",
+          "query": "from(bucket: \"network_flows\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"alert\")\n  |> filter(fn: (r) => r._field == \"risk_score\")\n  |> group(columns: [\"severity\"])\n  |> aggregateWindow(every: 10m, fn: count, createEmpty: true)\n  |> fill(value: 0.0)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "🔢 Stat: Total Flows (1h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 23 },
+      "datasource": "WhoApp-InfluxDB",
+      "options": { "graphMode": "area", "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue" }] } } },
+      "targets": [
+        {
+          "datasource": "WhoApp-InfluxDB",
+          "query": "from(bucket: \"network_flows\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"flow\")\n  |> filter(fn: (r) => r._field == \"packet_count\")\n  |> count()",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "🔴 Stat: Critical Alerts (1h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 23 },
+      "datasource": "WhoApp-InfluxDB",
+      "options": { "graphMode": "area", "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green" }, { "color": "red", "value": 1 }] } } },
+      "targets": [
+        {
+          "datasource": "WhoApp-InfluxDB",
+          "query": "from(bucket: \"network_flows\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"alert\")\n  |> filter(fn: (r) => r.severity == \"Critical\")\n  |> filter(fn: (r) => r._field == \"risk_score\")\n  |> count()",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "📡 Stat: Unique Devices",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 23 },
+      "datasource": "WhoApp-InfluxDB",
+      "options": { "graphMode": "area", "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "color": { "fixedColor": "cyan", "mode": "fixed" } } },
+      "targets": [
+        {
+          "datasource": "WhoApp-InfluxDB",
+          "query": "from(bucket: \"network_flows\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"flow\")\n  |> filter(fn: (r) => r._field == \"byte_count\")\n  |> group(columns: [\"src_ip\"])\n  |> distinct(column: \"src_ip\")\n  |> count()",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "⚡ Stat: Avg Risk Score",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 23 },
+      "datasource": "WhoApp-InfluxDB",
+      "options": { "graphMode": "area", "colorMode": "background", "reduceOptions": { "calcs": ["mean"] } },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green" }, { "color": "yellow", "value": 4 }, { "color": "orange", "value": 7 }, { "color": "red", "value": 9 }] }, "decimals": 1, "max": 10 } },
+      "targets": [
+        {
+          "datasource": "WhoApp-InfluxDB",
+          "query": "from(bucket: \"network_flows\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"flow\")\n  |> filter(fn: (r) => r._field == \"risk_score\")\n  |> mean()",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "tags": ["whoapp", "network", "security"],
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "WhoApp — Network Intelligence",
+  "uid": "whoapp-main",
+  "version": 1
+}

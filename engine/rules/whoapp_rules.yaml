@@ -1,0 +1,282 @@
+# WhoApp — Antigravity Detection Ruleset
+# Format: each rule has a name, conditions (DSL), and actions.
+# Supported operators: ==, !=, IN, NOT IN, >=, <=, BETWEEN, AND, OR
+
+rules:
+
+  # ── Messaging & Communication ────────────────────────────────────────────────
+
+  - name: "Unauthorized Messaging on Work Hours"
+    description: "Non-approved messaging app used on corporate laptop during work hours"
+    severity: High
+    tags: [policy_violation, unauthorized_communication]
+    conditions:
+      all:
+        - field: app.category
+          op: "=="
+          value: messaging
+        - field: app.name
+          op: NOT IN
+          value: [Slack, Microsoft Teams, Webex]
+        - field: identity.device_type
+          op: "=="
+          value: laptop
+        - field: time.hour_of_day
+          op: BETWEEN
+          value: [9, 17]
+        - field: network.direction
+          op: "=="
+          value: outbound
+
+  - name: "Encrypted Messaging Spike"
+    description: "Unusual volume of encrypted messaging traffic from single user"
+    severity: Medium
+    tags: [policy_violation, data_exfil_risk]
+    conditions:
+      all:
+        - field: app.category
+          op: "=="
+          value: messaging
+        - field: flow.byte_count
+          op: ">="
+          value: 10485760
+        - field: identity.device_type
+          op: "=="
+          value: laptop
+
+  # ── Dark Web ─────────────────────────────────────────────────────────────────
+
+  - name: "Dark Web Access Detected"
+    description: "Device is communicating with Tor, I2P, or Freenet infrastructure"
+    severity: Critical
+    tags: [dark_web_access, requires_investigation, escalate_security]
+    conditions:
+      any:
+        - field: app.name
+          op: IN
+          value: [Tor Browser, Tor Browser (v1), Tor Browser (v2), Tor Browser (v3), Tor OR port, Tor Dir Auth, Tor SOCKS, Tor Browser SOCKS, Tor Hidden Svc, I2P Router, Freenet]
+        - field: app.category
+          op: "=="
+          value: dark_web
+
+  - name: "Tor Bridge Connection"
+    description: "Traffic on Tor obfs4 obfuscated bridge ports"
+    severity: Critical
+    tags: [dark_web_access, tor_bridge, evasion_technique]
+    conditions:
+      any:
+        - field: flow.dst_port
+          op: "=="
+          value: 14433
+        - field: flow.dst_port
+          op: "=="
+          value: 14444
+
+  # ── After-Hours Anomalies ────────────────────────────────────────────────────
+
+  - name: "After-Hours Anomalous Behavior"
+    description: "Sensitive application usage outside business hours by non-whitelist user"
+    severity: Medium
+    tags: [after_hours_anomaly, possible_insider_threat]
+    conditions:
+      all:
+        - field: time.hour_of_day
+          op: BETWEEN
+          value: [22, 6]
+        - field: app.category
+          op: IN
+          value: [messaging, file_transfer, vpn, cloud_storage, torrent]
+        - field: identity.user
+          op: NOT IN
+          value: [oncall_admin, oncall_ops, sysadmin]
+
+  - name: "Weekend High-Risk Application"
+    description: "High-risk application observed on weekend"
+    severity: Medium
+    tags: [after_hours_anomaly, weekend_usage]
+    conditions:
+      all:
+        - field: time.is_weekend
+          op: "=="
+          value: true
+        - field: app.risk_score
+          op: ">="
+          value: 7
+        - field: identity.device_type
+          op: IN
+          value: [laptop, server]
+
+  # ── VPN & Proxy ──────────────────────────────────────────────────────────────
+
+  - name: "VPN Usage Detected"
+    description: "Corporate device using VPN — may indicate policy bypass attempt"
+    severity: Medium
+    tags: [vpn_usage, policy_check, possible_bypass]
+    conditions:
+      all:
+        - field: app.category
+          op: "=="
+          value: vpn
+        - field: identity.device_type
+          op: IN
+          value: [laptop, phone]
+
+  - name: "Unauthorized Remote Desktop"
+    description: "Inbound RDP/VNC connection to corporate device from unknown source"
+    severity: High
+    tags: [remote_access, unauthorized_rdp, lateral_movement_risk]
+    conditions:
+      all:
+        - field: app.category
+          op: "=="
+          value: remote_access
+        - field: app.name
+          op: IN
+          value: [RDP, VNC, AnyDesk, TeamViewer]
+        - field: network.direction
+          op: "=="
+          value: inbound
+
+  # ── Malware & Exploits ───────────────────────────────────────────────────────
+
+  - name: "Unknown Application Fingerprint"
+    description: "Traffic from unidentified application with high risk score"
+    severity: Medium
+    tags: [unknown_application, fingerprint_database_gap]
+    conditions:
+      all:
+        - field: app.name
+          op: "=="
+          value: unknown
+        - field: app.risk_score
+          op: ">="
+          value: 7
+
+  - name: "Exploit Tool Detected"
+    description: "Known exploit framework or scanner detected on the network"
+    severity: Critical
+    tags: [exploit_tool, active_attack, incident_response]
+    conditions:
+      any:
+        - field: app.category
+          op: "=="
+          value: exploit_tool
+        - field: app.name
+          op: IN
+          value: [Metasploit Framework, Nikto Web Scanner, Nmap SSL scan]
+
+  # ── Crypto Mining ────────────────────────────────────────────────────────────
+
+  - name: "Cryptocurrency Mining Detected"
+    description: "Device is connecting to mining pools or running miner software"
+    severity: Critical
+    tags: [crypto_mining, resource_abuse, policy_violation]
+    conditions:
+      any:
+        - field: app.category
+          op: "=="
+          value: crypto_mining
+        - field: app.name
+          op: IN
+          value: [XMRig Miner, EtherMine Pool, CoinHive Miner]
+
+  # ── Data Exfiltration ────────────────────────────────────────────────────────
+
+  - name: "Large Cloud Upload — Potential Exfiltration"
+    description: "Unusually large outbound transfer to cloud storage provider"
+    severity: High
+    tags: [data_exfiltration, cloud_upload, requires_investigation]
+    conditions:
+      all:
+        - field: app.category
+          op: "=="
+          value: cloud_storage
+        - field: flow.byte_count
+          op: ">="
+          value: 104857600
+        - field: network.direction
+          op: "=="
+          value: outbound
+
+  - name: "P2P / Torrent Activity"
+    description: "BitTorrent or other P2P file sharing detected on corporate network"
+    severity: High
+    tags: [torrent, p2p, policy_violation, bandwidth_abuse]
+    conditions:
+      any:
+        - field: app.category
+          op: "=="
+          value: torrent
+        - field: app.name
+          op: IN
+          value: [BitTorrent Client, qBittorrent, uTorrent]
+
+  # ── Device Anomalies ─────────────────────────────────────────────────────────
+
+  - name: "IoT Device Unexpected Outbound"
+    description: "IoT device initiating outbound connections to non-local IPs"
+    severity: Medium
+    tags: [iot_anomaly, possible_botnet, requires_investigation]
+    conditions:
+      all:
+        - field: identity.device_type
+          op: "=="
+          value: iot
+        - field: network.direction
+          op: "=="
+          value: outbound
+        - field: app.category
+          op: NOT IN
+          value: [browser, update_service]
+
+  - name: "Social Media on Server-Class Device"
+    description: "Server or headless device generating social media traffic"
+    severity: Medium
+    tags: [social_media, server_anomaly, possible_compromise]
+    conditions:
+      all:
+        - field: identity.device_type
+          op: "=="
+          value: server
+        - field: app.category
+          op: "=="
+          value: social_media
+
+  - name: "High-Risk App on Corporate Laptop"
+    description: "Application with risk score ≥ 8 observed on corporate laptop"
+    severity: High
+    tags: [high_risk_app, policy_violation]
+    conditions:
+      all:
+        - field: app.risk_score
+          op: ">="
+          value: 8
+        - field: identity.device_type
+          op: "=="
+          value: laptop
+
+  - name: "Scanner Detected on Internal Network"
+    description: "Network scanning tool observed — possible reconnaissance"
+    severity: Critical
+    tags: [scanner, reconnaissance, possible_lateral_movement]
+    conditions:
+      any:
+        - field: app.category
+          op: "=="
+          value: scanner
+        - field: app.name
+          op: IN
+          value: [Nmap SSL scan, Nikto Web Scanner]
+
+  - name: "TikTok Access from Corporate Device"
+    description: "TikTok (Chinese-operated, data privacy risk) detected on corporate network"
+    severity: High
+    tags: [tiktok, data_privacy_risk, policy_violation]
+    conditions:
+      all:
+        - field: app.name
+          op: "=="
+          value: TikTok
+        - field: identity.device_type
+          op: IN
+          value: [laptop, phone]
